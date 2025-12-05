@@ -1,0 +1,10 @@
+﻿<Application x:Class="DebugMvvM.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DebugMvvM.App"
+             xmlns:converters="clr-namespace:DebugMvvM.App.Converters"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
+    </Application.Resources>
+</Application>
