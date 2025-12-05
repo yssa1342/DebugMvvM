@@ -8,9 +8,10 @@ namespace DebugMvvM.ViewModels;
 /// <summary>
 /// ViewModel for GJ750_4_60A device
 /// </summary>
-public partial class GJ750_4_60AViewModel : ViewModelBase
+public partial class GJ750_4_60AViewModel : ViewModelBase, IDisposable
 {
     private readonly GJ750_4_60AService _deviceService;
+    private CancellationTokenSource? _pollingCancellationTokenSource;
     
     [ObservableProperty]
     private GJ750_4_60ADevice _device;
@@ -41,21 +42,34 @@ public partial class GJ750_4_60AViewModel : ViewModelBase
         
         if (result)
         {
-            // Start periodic data reading
+            // Start periodic data reading with cancellation support
+            _pollingCancellationTokenSource = new CancellationTokenSource();
             _ = Task.Run(async () =>
             {
-                while (IsConnected)
+                try
                 {
-                    await ReadDataAsync();
-                    await Task.Delay(1000); // Update every second
+                    while (IsConnected && !_pollingCancellationTokenSource.Token.IsCancellationRequested)
+                    {
+                        await ReadDataAsync();
+                        await Task.Delay(1000, _pollingCancellationTokenSource.Token); // Update every second
+                    }
                 }
-            });
+                catch (OperationCanceledException)
+                {
+                    // Task was cancelled, this is expected
+                }
+            }, _pollingCancellationTokenSource.Token);
         }
     }
 
     [RelayCommand]
     private async Task DisconnectAsync()
     {
+        // Cancel the polling task
+        _pollingCancellationTokenSource?.Cancel();
+        _pollingCancellationTokenSource?.Dispose();
+        _pollingCancellationTokenSource = null;
+        
         await _deviceService.DisconnectAsync(Device);
         IsConnected = false;
         ConnectionStatus = "Disconnected";
@@ -69,5 +83,11 @@ public partial class GJ750_4_60AViewModel : ViewModelBase
         {
             Device = updatedDevice;
         }
+    }
+
+    public void Dispose()
+    {
+        _pollingCancellationTokenSource?.Cancel();
+        _pollingCancellationTokenSource?.Dispose();
     }
 }

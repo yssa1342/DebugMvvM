@@ -8,9 +8,10 @@ namespace DebugMvvM.ViewModels;
 /// <summary>
 /// ViewModel for Vdc_32 device
 /// </summary>
-public partial class Vdc32ViewModel : ViewModelBase
+public partial class Vdc32ViewModel : ViewModelBase, IDisposable
 {
     private readonly Vdc32Service _deviceService;
+    private CancellationTokenSource? _pollingCancellationTokenSource;
     
     [ObservableProperty]
     private Vdc32Device _device;
@@ -41,21 +42,34 @@ public partial class Vdc32ViewModel : ViewModelBase
         
         if (result)
         {
-            // Start periodic data reading
+            // Start periodic data reading with cancellation support
+            _pollingCancellationTokenSource = new CancellationTokenSource();
             _ = Task.Run(async () =>
             {
-                while (IsConnected)
+                try
                 {
-                    await ReadDataAsync();
-                    await Task.Delay(1000); // Update every second
+                    while (IsConnected && !_pollingCancellationTokenSource.Token.IsCancellationRequested)
+                    {
+                        await ReadDataAsync();
+                        await Task.Delay(1000, _pollingCancellationTokenSource.Token); // Update every second
+                    }
                 }
-            });
+                catch (OperationCanceledException)
+                {
+                    // Task was cancelled, this is expected
+                }
+            }, _pollingCancellationTokenSource.Token);
         }
     }
 
     [RelayCommand]
     private async Task DisconnectAsync()
     {
+        // Cancel the polling task
+        _pollingCancellationTokenSource?.Cancel();
+        _pollingCancellationTokenSource?.Dispose();
+        _pollingCancellationTokenSource = null;
+        
         await _deviceService.DisconnectAsync(Device);
         IsConnected = false;
         ConnectionStatus = "Disconnected";
@@ -69,5 +83,11 @@ public partial class Vdc32ViewModel : ViewModelBase
         {
             Device = updatedDevice;
         }
+    }
+
+    public void Dispose()
+    {
+        _pollingCancellationTokenSource?.Cancel();
+        _pollingCancellationTokenSource?.Dispose();
     }
 }
